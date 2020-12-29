@@ -1,7 +1,9 @@
 package jadx.gui.utils.search;
 
+import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
+import org.apache.commons.lang3.StringUtils;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -9,15 +11,21 @@ public class SearchSettings {
 
 	private static final Logger LOG = LoggerFactory.getLogger(SearchSettings.class);
 
-	private String searchString;
+	private final String searchString;
 
-	private boolean useRegex;
+	private final boolean useRegex;
 
-	private boolean ignoreCase;
+	private final boolean ignoreCase;
 
 	private Pattern regexPattern;
 
 	private int startPos = 0;
+
+	public SearchSettings(String searchString, boolean ignoreCase, boolean useRegex) {
+		this.searchString = searchString;
+		this.useRegex = useRegex;
+		this.ignoreCase = ignoreCase;
+	}
 
 	/*
 	 * Return whether Regex search should be done
@@ -48,20 +56,6 @@ public class SearchSettings {
 	}
 
 	/*
-	 * Set whether Regex search should be done
-	 */
-	public void setRegex(boolean useRegex) {
-		this.useRegex = useRegex;
-	}
-
-	/*
-	 * Set whether case should be ignored
-	 */
-	public void setIgnoreCase(boolean ignoreCase) {
-		this.ignoreCase = ignoreCase;
-	}
-
-	/*
 	 * Set Starting Index
 	 */
 	public void setStartPos(int startPos) {
@@ -73,13 +67,6 @@ public class SearchSettings {
 	 */
 	public Pattern getPattern() {
 		return this.regexPattern;
-	}
-
-	/*
-	 * Set search string
-	 */
-	public void setSearchString(String searchString) {
-		this.searchString = searchString;
 	}
 
 	/*
@@ -98,6 +85,51 @@ public class SearchSettings {
 			return false;
 		}
 		return true;
+	}
+
+	/*
+	 * Checks if searchArea matches the searched string found in searchSettings
+	 */
+	public boolean isMatch(StringRef searchArea) {
+		return isMatch(searchArea.toString());
+	}
+
+	/*
+	 * Checks if searchArea matches the searched string found in searchSettings
+	 */
+	public boolean isMatch(String searchArea) {
+		return find(searchArea) != -1;
+	}
+
+	/*
+	 * Returns the position within searchArea that the searched string found in searchSettings was
+	 * identified.
+	 * returns -1 if a match is not found
+	 */
+	public int find(StringRef searchArea) {
+		return find(searchArea.toString());
+	}
+
+	/*
+	 * Returns the position within searchArea that the searched string found in searchSettings was
+	 * identified.
+	 * returns -1 if a match is not found
+	 */
+	public int find(String searchArea) {
+		int pos;
+		if (this.useRegex) {
+			Matcher matcher = this.regexPattern.matcher(searchArea);
+			if (matcher.find(this.startPos)) {
+				pos = matcher.start();
+			} else {
+				pos = -1;
+			}
+		} else if (this.ignoreCase) {
+			pos = StringUtils.indexOfIgnoreCase(searchArea, this.searchString, this.startPos);
+		} else {
+			pos = searchArea.indexOf(this.searchString, this.startPos);
+		}
+		return pos;
 	}
 
 }

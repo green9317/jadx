@@ -99,10 +99,7 @@ public class TextSearchIndex {
 		LOG.debug("Building search, ignoreCase: {}, useRegex: {}", ignoreCase, useRegex);
 		Flowable<JNode> result = Flowable.empty();
 
-		SearchSettings searchSettings = new SearchSettings();
-		searchSettings.setSearchString(text);
-		searchSettings.setIgnoreCase(options.contains(IGNORE_CASE));
-		searchSettings.setRegex(options.contains(USE_REGEX));
+		SearchSettings searchSettings = new SearchSettings(text, options.contains(IGNORE_CASE), options.contains(USE_REGEX));
 		if (!searchSettings.preCompile()) {
 			return result;
 		}
@@ -154,7 +151,7 @@ public class TextSearchIndex {
 
 	private int searchNext(FlowableEmitter<CodeNode> emitter, JavaNode javaClass, String code, final SearchSettings searchSettings) {
 		int pos;
-		pos = SearchImpl.find(code, searchSettings);
+		pos = searchSettings.find(code);
 		if (pos == -1) {
 			return -1;
 		}
