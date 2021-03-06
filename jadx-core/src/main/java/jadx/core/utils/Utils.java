@@ -16,8 +16,8 @@ import java.util.function.Function;
 
 import org.jetbrains.annotations.Nullable;
 
+import jadx.api.ICodeWriter;
 import jadx.api.JadxDecompiler;
-import jadx.core.codegen.CodeWriter;
 import jadx.core.dex.visitors.DepthTraversal;
 
 public class Utils {
@@ -124,7 +124,7 @@ public class Utils {
 		return sw.getBuffer().toString();
 	}
 
-	public static void appendStackTrace(CodeWriter code, Throwable throwable) {
+	public static void appendStackTrace(ICodeWriter code, Throwable throwable) {
 		if (throwable == null) {
 			return;
 		}
@@ -309,11 +309,42 @@ public class Utils {
 	}
 
 	@Nullable
+	public static <T> T first(List<T> list) {
+		if (list.isEmpty()) {
+			return null;
+		}
+		return list.get(0);
+	}
+
+	@Nullable
+	public static <T> T first(Iterable<T> list) {
+		Iterator<T> it = list.iterator();
+		if (!it.hasNext()) {
+			return null;
+		}
+		return it.next();
+	}
+
+	@Nullable
 	public static <T> T last(List<T> list) {
 		if (list.isEmpty()) {
 			return null;
 		}
 		return list.get(list.size() - 1);
+	}
+
+	@Nullable
+	public static <T> T last(Iterable<T> list) {
+		Iterator<T> it = list.iterator();
+		if (!it.hasNext()) {
+			return null;
+		}
+		while (true) {
+			T next = it.next();
+			if (!it.hasNext()) {
+				return next;
+			}
+		}
 	}
 
 	public static <T> T getOrElse(@Nullable T obj, T defaultObj) {

@@ -3,6 +3,8 @@ package jadx.gui.treemodel;
 import javax.swing.Icon;
 import javax.swing.ImageIcon;
 
+import org.fife.ui.rsyntaxtextarea.SyntaxConstants;
+
 import jadx.api.JavaField;
 import jadx.api.JavaNode;
 import jadx.core.dex.attributes.AFlag;
@@ -27,6 +29,10 @@ public class JField extends JNode {
 	public JField(JavaField javaField, JClass jClass) {
 		this.field = javaField;
 		this.jParent = jClass;
+	}
+
+	public JavaField getJavaField() {
+		return (JavaField) getJavaNode();
 	}
 
 	@Override
@@ -65,6 +71,11 @@ public class JField extends JNode {
 			icon.add(ICON_VOLATILE);
 		}
 		return icon;
+	}
+
+	@Override
+	public String getSyntaxName() {
+		return SyntaxConstants.SYNTAX_STYLE_JAVA;
 	}
 
 	@Override

@@ -1,19 +1,20 @@
 package jadx.gui.utils;
 
+import jadx.api.CodePosition;
+import jadx.api.JavaNode;
 import jadx.gui.treemodel.JNode;
 
 public class JumpPosition {
 	private final JNode node;
 	private final int line;
-	// the position of the node in java code,
-	// call codeArea.scrollToPos(pos) to set caret
 	private int pos;
-	// Precise means caret can be set right at the node in codeArea,
-	// not just the start of the line.
-	private boolean precise;
 
-	public JumpPosition(JNode node, int line) {
-		this(node, line, 0);
+	public JumpPosition(JNode jumpNode) {
+		this(jumpNode.getRootClass(), jumpNode.getLine(), jumpNode.getPos());
+	}
+
+	public JumpPosition(JNode jumpNode, CodePosition codePos) {
+		this(jumpNode.getRootClass(), codePos.getLine(), codePos.getPos());
 	}
 
 	public JumpPosition(JNode node, int line, int pos) {
@@ -22,18 +23,12 @@ public class JumpPosition {
 		this.pos = pos;
 	}
 
-	public boolean isPrecise() {
-		return precise;
-	}
-
-	public JumpPosition setPrecise(int pos) {
-		this.pos = pos;
-		this.precise = true;
-		return this;
-	}
-
 	public int getPos() {
 		return pos;
+	}
+
+	public void setPos(int pos) {
+		this.pos = pos;
 	}
 
 	public JNode getNode() {
@@ -42,6 +37,14 @@ public class JumpPosition {
 
 	public int getLine() {
 		return line;
+	}
+
+	public static int getDefPos(JNode node) {
+		JavaNode javaNode = node.getJavaNode();
+		if (javaNode == null) {
+			return -1;
+		}
+		return javaNode.getDefPos();
 	}
 
 	@Override

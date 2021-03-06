@@ -34,11 +34,13 @@ import jadx.core.dex.nodes.ClassNode;
 import jadx.core.dex.nodes.FieldNode;
 import jadx.core.dex.nodes.MethodNode;
 import jadx.core.dex.nodes.RootNode;
+import jadx.core.dex.nodes.VariableNode;
 import jadx.core.dex.visitors.SaveCode;
 import jadx.core.export.ExportGradleProject;
 import jadx.core.utils.Utils;
 import jadx.core.utils.exceptions.JadxRuntimeException;
 import jadx.core.xmlgen.BinaryXMLParser;
+import jadx.core.xmlgen.ResContainer;
 import jadx.core.xmlgen.ResourcesSaver;
 
 /**
@@ -193,7 +195,23 @@ public final class JadxDecompiler implements Closeable {
 		File sourcesOutDir;
 		File resOutDir;
 		if (args.isExportAsGradleProject()) {
-			ExportGradleProject export = new ExportGradleProject(root, args.getOutDir());
+			ResourceFile androidManifest = resources.stream()
+					.filter(resourceFile -> resourceFile.getType() == ResourceType.MANIFEST)
+					.findFirst()
+					.orElseThrow(IllegalStateException::new);
+
+			ResContainer strings = resources.stream()
+					.filter(resourceFile -> resourceFile.getType() == ResourceType.ARSC)
+					.findFirst()
+					.orElseThrow(IllegalStateException::new)
+					.loadContent()
+					.getSubFiles()
+					.stream()
+					.filter(resContainer -> resContainer.getFileName().contains("strings.xml"))
+					.findFirst()
+					.orElseThrow(IllegalStateException::new);
+
+			ExportGradleProject export = new ExportGradleProject(root, args.getOutDir(), androidManifest, strings);
 			export.init();
 			sourcesOutDir = export.getSrcOutDir();
 			resOutDir = export.getResOutDir();
@@ -415,6 +433,15 @@ public final class JadxDecompiler implements Closeable {
 	}
 
 	@Nullable
+	public JavaClass searchJavaClassByOrigFullName(String fullName) {
+		return getRoot().getClasses().stream()
+				.filter(cls -> cls.getClassInfo().getFullName().equals(fullName))
+				.findFirst()
+				.map(this::getJavaClassByNode)
+				.orElse(null);
+	}
+
+	@Nullable
 	JavaNode convertNode(Object obj) {
 		if (!(obj instanceof LineAttrNode)) {
 			return null;
@@ -431,6 +458,10 @@ public final class JadxDecompiler implements Closeable {
 		}
 		if (obj instanceof FieldNode) {
 			return getJavaFieldByNode((FieldNode) obj);
+		}
+		if (obj instanceof VariableNode) {
+			VariableNode varNode = (VariableNode) obj;
+			return new JavaVariable(getJavaClassByNode(varNode.getClassNode().getTopParentClass()), varNode);
 		}
 		throw new JadxRuntimeException("Unexpected node type: " + obj);
 	}
@@ -463,7 +494,7 @@ public final class JadxDecompiler implements Closeable {
 		if (defLine == 0) {
 			return null;
 		}
-		return new CodePosition(jCls, defLine, 0);
+		return new CodePosition(defLine, 0, javaNode.getDefPos());
 	}
 
 	public JadxArgs getArgs() {

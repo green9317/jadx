@@ -11,40 +11,52 @@ import io.reactivex.BackpressureStrategy;
 import io.reactivex.Flowable;
 import io.reactivex.FlowableEmitter;
 
+import jadx.api.ICodeWriter;
 import jadx.api.JavaClass;
 import jadx.api.JavaField;
 import jadx.api.JavaMethod;
 import jadx.api.JavaNode;
-import jadx.core.codegen.CodeWriter;
 import jadx.gui.treemodel.CodeNode;
 import jadx.gui.treemodel.JNode;
+import jadx.gui.ui.MainWindow;
 import jadx.gui.ui.SearchDialog;
+import jadx.gui.utils.CacheObject;
 import jadx.gui.utils.CodeLinesInfo;
 import jadx.gui.utils.JNodeCache;
+import jadx.gui.utils.JumpPosition;
 import jadx.gui.utils.UiUtils;
 
+import static jadx.gui.ui.SearchDialog.SearchOptions.ACTIVE_TAB;
 import static jadx.gui.ui.SearchDialog.SearchOptions.CLASS;
 import static jadx.gui.ui.SearchDialog.SearchOptions.CODE;
+import static jadx.gui.ui.SearchDialog.SearchOptions.COMMENT;
 import static jadx.gui.ui.SearchDialog.SearchOptions.FIELD;
 import static jadx.gui.ui.SearchDialog.SearchOptions.IGNORE_CASE;
 import static jadx.gui.ui.SearchDialog.SearchOptions.METHOD;
+import static jadx.gui.ui.SearchDialog.SearchOptions.RESOURCE;
 import static jadx.gui.ui.SearchDialog.SearchOptions.USE_REGEX;
 
 public class TextSearchIndex {
 
 	private static final Logger LOG = LoggerFactory.getLogger(TextSearchIndex.class);
 
+	private final CacheObject cache;
+	private final MainWindow mainWindow;
 	private final JNodeCache nodeCache;
 
 	private final SimpleIndex clsNamesIndex;
 	private final SimpleIndex mthSignaturesIndex;
 	private final SimpleIndex fldSignaturesIndex;
 	private final CodeIndex codeIndex;
+	private final ResourceIndex resIndex;
 
 	private final List<JavaClass> skippedClasses = new ArrayList<>();
 
-	public TextSearchIndex(JNodeCache nodeCache) {
-		this.nodeCache = nodeCache;
+	public TextSearchIndex(MainWindow mainWindow) {
+		this.mainWindow = mainWindow;
+		this.cache = mainWindow.getCacheObject();
+		this.nodeCache = cache.getNodeCache();
+		this.resIndex = new ResourceIndex(cache);
 		this.clsNamesIndex = new SimpleIndex();
 		this.mthSignaturesIndex = new SimpleIndex();
 		this.fldSignaturesIndex = new SimpleIndex();
@@ -77,12 +89,17 @@ public class TextSearchIndex {
 				}
 				int lineNum = i + 1;
 				JavaNode node = linesInfo.getJavaNodeByLine(lineNum);
-				JNode nodeAtLine = nodeCache.makeFrom(node == null ? cls : node);
-				codeIndex.put(new CodeNode(nodeAtLine, lineNum, line));
+				JavaNode javaNode = node == null ? cls : node;
+				JNode nodeAtLine = nodeCache.makeFrom(javaNode);
+				codeIndex.put(new CodeNode(nodeAtLine, line, lineNum, javaNode.getDefPos()));
 			}
 		} catch (Exception e) {
 			LOG.warn("Failed to index class: {}", cls, e);
 		}
+	}
+
+	public void indexResource() {
+		resIndex.index();
 	}
 
 	public void remove(JavaClass cls) {
@@ -100,8 +117,27 @@ public class TextSearchIndex {
 		Flowable<JNode> result = Flowable.empty();
 
 		SearchSettings searchSettings = new SearchSettings(text, options.contains(IGNORE_CASE), options.contains(USE_REGEX));
+		if (options.contains(ACTIVE_TAB)) {
+			JumpPosition activeNode = mainWindow.getTabbedPane().getCurrentPosition();
+			if (activeNode != null) {
+				searchSettings.setActiveCls(activeNode.getNode().getRootClass());
+			}
+			if (searchSettings.getActiveCls() == null) {
+				return result;
+			}
+		}
 		if (!searchSettings.preCompile()) {
 			return result;
+		}
+
+		if (options.contains(COMMENT)) {
+			CommentsIndex commentsIndex = cache.getCommentsIndex();
+			result = Flowable.concat(result, commentsIndex.search(searchSettings));
+			if (text.isEmpty()) {
+				// return all comments on empty search string
+				// other searches don't support empty string, so return immediately
+				return result;
+			}
 		}
 
 		if (options.contains(CLASS)) {
@@ -120,6 +156,9 @@ public class TextSearchIndex {
 			if (!skippedClasses.isEmpty()) {
 				result = Flowable.concat(result, searchInSkippedClasses(searchSettings));
 			}
+		}
+		if (options.contains(RESOURCE)) {
+			result = Flowable.concat(result, resIndex.search(searchSettings));
 		}
 		return result;
 	}
@@ -146,19 +185,18 @@ public class TextSearchIndex {
 			}
 			LOG.debug("Skipped code search complete: {}, memory usage: {}", searchSettings.getSearchString(), UiUtils.memoryInfo());
 			emitter.onComplete();
-		}, BackpressureStrategy.LATEST);
+		}, BackpressureStrategy.BUFFER);
 	}
 
 	private int searchNext(FlowableEmitter<CodeNode> emitter, JavaNode javaClass, String code, final SearchSettings searchSettings) {
-		int pos;
-		pos = searchSettings.find(code);
+		int pos = searchSettings.find(code);
 		if (pos == -1) {
 			return -1;
 		}
-		int lineStart = 1 + code.lastIndexOf(CodeWriter.NL, pos);
-		int lineEnd = code.indexOf(CodeWriter.NL, pos + searchSettings.getSearchString().length());
+		int lineStart = 1 + code.lastIndexOf(ICodeWriter.NL, pos);
+		int lineEnd = code.indexOf(ICodeWriter.NL, pos + searchSettings.getSearchString().length());
 		StringRef line = StringRef.subString(code, lineStart, lineEnd == -1 ? code.length() : lineEnd);
-		emitter.onNext(new CodeNode(nodeCache.makeFrom(javaClass), -pos, line.trim()));
+		emitter.onNext(new CodeNode(nodeCache.makeFrom(javaClass), line.trim(), -1, pos));
 		return lineEnd;
 	}
 

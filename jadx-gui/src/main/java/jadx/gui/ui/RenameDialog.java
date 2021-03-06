@@ -27,16 +27,17 @@ import org.jetbrains.annotations.NotNull;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import jadx.api.ICodeWriter;
 import jadx.api.JavaClass;
 import jadx.api.JavaField;
 import jadx.api.JavaMethod;
 import jadx.api.JavaNode;
-import jadx.core.codegen.CodeWriter;
 import jadx.core.deobf.DeobfPresets;
 import jadx.core.dex.attributes.AType;
 import jadx.core.dex.attributes.nodes.MethodOverrideAttr;
 import jadx.core.dex.nodes.MethodNode;
 import jadx.core.dex.nodes.RootNode;
+import jadx.core.dex.nodes.VariableNode;
 import jadx.core.dex.visitors.RenameVisitor;
 import jadx.core.utils.Utils;
 import jadx.core.utils.exceptions.JadxRuntimeException;
@@ -47,9 +48,14 @@ import jadx.gui.treemodel.JField;
 import jadx.gui.treemodel.JMethod;
 import jadx.gui.treemodel.JNode;
 import jadx.gui.treemodel.JPackage;
+import jadx.gui.treemodel.JVariable;
 import jadx.gui.ui.codearea.ClassCodeContentPanel;
-import jadx.gui.ui.codearea.CodePanel;
-import jadx.gui.utils.*;
+import jadx.gui.ui.codearea.CodeArea;
+import jadx.gui.utils.CacheObject;
+import jadx.gui.utils.JNodeCache;
+import jadx.gui.utils.NLS;
+import jadx.gui.utils.TextStandardActions;
+import jadx.gui.utils.UiUtils;
 
 public class RenameDialog extends JDialog {
 	private static final long serialVersionUID = -3269715644416902410L;
@@ -80,16 +86,16 @@ public class RenameDialog extends JDialog {
 
 	public static boolean checkSettings(MainWindow mainWindow) {
 		StringBuilder errorMessage = new StringBuilder();
-		errorMessage.append(NLS.str("msg.rename_disabled")).append(CodeWriter.NL);
+		errorMessage.append(NLS.str("msg.rename_disabled")).append(ICodeWriter.NL);
 
 		JadxSettings settings = mainWindow.getSettings();
 		boolean valid = true;
 		if (!settings.isDeobfuscationOn()) {
-			errorMessage.append(" - ").append(NLS.str("msg.rename_disabled_deobfuscation_disabled")).append(CodeWriter.NL);
+			errorMessage.append(" - ").append(NLS.str("msg.rename_disabled_deobfuscation_disabled")).append(ICodeWriter.NL);
 			valid = false;
 		}
 		if (settings.isDeobfuscationForceSave()) {
-			errorMessage.append(" - ").append(NLS.str("msg.rename_disabled_force_rewrite_enabled")).append(CodeWriter.NL);
+			errorMessage.append(" - ").append(NLS.str("msg.rename_disabled_force_rewrite_enabled")).append(ICodeWriter.NL);
 			valid = false;
 		}
 		if (valid) {
@@ -126,6 +132,9 @@ public class RenameDialog extends JDialog {
 			deobfPresets.getClsPresetMap().put(javaClass.getRawName(), renameText);
 		} else if (node instanceof JPackage) {
 			deobfPresets.getPkgPresetMap().put(((JPackage) node).getFullName(), renameText);
+		} else if (node instanceof JVariable) {
+			VariableNode varNode = ((JVariable) node).getJavaVarNode().getVariableNode();
+			deobfPresets.updateVariableName(varNode, renameText);
 		}
 	}
 
@@ -243,17 +252,11 @@ public class RenameDialog extends JDialog {
 
 	private void refreshTabs(TabbedPane tabbedPane, Set<JClass> updatedClasses) {
 		for (Map.Entry<JNode, ContentPanel> entry : tabbedPane.getOpenTabs().entrySet()) {
-			ContentPanel contentPanel = entry.getValue();
-			if (contentPanel instanceof ClassCodeContentPanel) {
-				JNode node = entry.getKey();
-				JClass rootClass = node.getRootClass();
-				if (updatedClasses.contains(rootClass)) {
-					refreshJClass(rootClass);
-					ClassCodeContentPanel codePanel = (ClassCodeContentPanel) contentPanel;
-					CodePanel javaPanel = codePanel.getJavaCodePanel();
-					javaPanel.refresh();
-					tabbedPane.refresh(rootClass);
-				}
+			JClass rootClass = entry.getKey().getRootClass();
+			if (updatedClasses.remove(rootClass)) {
+				ClassCodeContentPanel contentPanel = (ClassCodeContentPanel) entry.getValue();
+				CodeArea codeArea = (CodeArea) contentPanel.getJavaCodePanel().getCodeArea();
+				codeArea.refreshClass();
 			}
 		}
 	}
@@ -262,7 +265,7 @@ public class RenameDialog extends JDialog {
 	protected JPanel initButtonsPanel() {
 		JButton cancelButton = new JButton(NLS.str("search_dialog.cancel"));
 		cancelButton.addActionListener(event -> dispose());
-		JButton renameBtn = new JButton(NLS.str("popup.rename"));
+		JButton renameBtn = new JButton(NLS.str("common_dialog.ok"));
 		renameBtn.addActionListener(event -> rename());
 		getRootPane().setDefaultButton(renameBtn);
 

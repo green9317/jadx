@@ -11,6 +11,7 @@ import io.reactivex.Flowable;
 
 import jadx.api.JavaClass;
 import jadx.gui.treemodel.CodeNode;
+import jadx.gui.treemodel.JClass;
 import jadx.gui.utils.UiUtils;
 
 public class CodeIndex {
@@ -32,11 +33,15 @@ public class CodeIndex {
 	}
 
 	public Flowable<CodeNode> search(final SearchSettings searchSettings) {
+		JClass activeCls = searchSettings.getActiveCls();
 		return Flowable.create(emitter -> {
 			LOG.debug("Code search started: {} ...", searchSettings.getSearchString());
 			for (CodeNode node : values) {
-				if (isMatched(node.getLineStr(), searchSettings)) {
-					emitter.onNext(node);
+				if (activeCls == null || node.getRootClass().equals(activeCls)) {
+					int pos = searchSettings.find(node.getLineStr());
+					if (pos > -1) {
+						emitter.onNext(node);
+					}
 				}
 				if (emitter.isCancelled()) {
 					LOG.debug("Code search canceled: {}", searchSettings.getSearchString());
@@ -45,7 +50,7 @@ public class CodeIndex {
 			}
 			LOG.debug("Code search complete: {}, memory usage: {}", searchSettings.getSearchString(), UiUtils.memoryInfo());
 			emitter.onComplete();
-		}, BackpressureStrategy.LATEST);
+		}, BackpressureStrategy.BUFFER);
 	}
 
 	public int size() {
